@@ -1,0 +1,169 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: k8s-log-dashboard
+  namespace: log
+  labels:
+    grafana_dashboard: "1"
+    app.kubernetes.io/name: grafana
+    app.kubernetes.io/part-of: log-pipeline
+data:
+  k8s-log-explorer.json: |
+    {
+      "annotations": {"list": []},
+      "description": "Cluster-wide Kubernetes log explorer with namespace/app/level drill-down",
+      "editable": true,
+      "fiscalYearStartMonth": 0,
+      "graphTooltip": 1,
+      "id": null,
+      "links": [],
+      "liveNow": true,
+      "panels": [
+        {
+          "id": 1,
+          "title": "Log Volume by App",
+          "description": "Number of log lines per app over time. Stacked bars show relative volume.",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 0},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=~\"$namespace\", app=~\"$app\"} [$__interval])) by (app)",
+              "legendFormat": "{{app}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 60,
+                "stacking": {"mode": "normal"},
+                "lineWidth": 0
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "table", "placement": "right", "calcs": ["sum", "max"]}
+          }
+        },
+        {
+          "id": 2,
+          "title": "Error Rate by App",
+          "description": "Count of ERROR/FATAL log lines per app. Spike here = something is broken.",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "expr": "sum(count_over_time({namespace=~\"$namespace\", app=~\"$app\", level=~\"error|err|fatal|panic|critical\"} [$__interval])) by (app)",
+              "legendFormat": "{{app}} errors",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "color": {"mode": "fixed", "fixedColor": "red"},
+              "custom": {
+                "drawStyle": "bars",
+                "fillOpacity": 70,
+                "stacking": {"mode": "normal"},
+                "lineWidth": 0
+              }
+            }
+          },
+          "options": {
+            "legend": {"displayMode": "list", "placement": "bottom"}
+          }
+        },
+        {
+          "id": 3,
+          "title": "Logs — ${namespace} / ${app} [level: ${level}]",
+          "description": "Live log stream. Click a row to expand. Use variables above to filter.",
+          "type": "logs",
+          "gridPos": {"h": 20, "w": 24, "x": 0, "y": 8},
+          "datasource": {"type": "loki", "uid": "loki"},
+          "targets": [
+            {
+              "expr": "{namespace=~\"$namespace\", app=~\"$app\", level=~\"$level\"}",
+              "refId": "A"
+            }
+          ],
+          "options": {
+            "showTime": true,
+            "showLabels": true,
+            "showCommonLabels": false,
+            "wrapLogMessage": true,
+            "enableLogDetails": true,
+            "sortOrder": "Descending",
+            "dedupStrategy": "none",
+            "prettifyLogMessage": false
+          }
+        }
+      ],
+      "refresh": "5s",
+      "schemaVersion": 38,
+      "style": "dark",
+      "tags": ["kubernetes", "logs", "loki"],
+      "templating": {
+        "list": [
+          {
+            "name": "DS_LOKI",
+            "type": "datasource",
+            "query": "loki",
+            "current": {"text": "Loki", "value": "loki"},
+            "hide": 2
+          },
+          {
+            "name": "namespace",
+            "label": "Namespace",
+            "type": "query",
+            "datasource": {"type": "loki", "uid": "loki"},
+            "definition": "label_values(namespace)",
+            "query": "label_values(namespace)",
+            "includeAll": true,
+            "multi": false,
+            "allValue": ".+",
+            "current": {"text": "log", "value": "log"},
+            "sort": 1,
+            "refresh": 2
+          },
+          {
+            "name": "app",
+            "label": "App",
+            "type": "query",
+            "datasource": {"type": "loki", "uid": "loki"},
+            "definition": "label_values({namespace=~\"$namespace\"}, app)",
+            "query": "label_values({namespace=~\"$namespace\"}, app)",
+            "includeAll": true,
+            "multi": false,
+            "allValue": ".+",
+            "sort": 1,
+            "refresh": 2
+          },
+          {
+            "name": "level",
+            "label": "Log Level",
+            "type": "custom",
+            "query": ".+,info,warning|warn,error|err,debug,fatal|panic",
+            "includeAll": false,
+            "multi": false,
+            "current": {"text": "All", "value": ".+"},
+            "options": [
+              {"text": "All",     "value": ".+",           "selected": true},
+              {"text": "Info",    "value": "info",         "selected": false},
+              {"text": "Warning", "value": "warning|warn", "selected": false},
+              {"text": "Error",   "value": "error|err",    "selected": false},
+              {"text": "Debug",   "value": "debug",        "selected": false},
+              {"text": "Fatal",   "value": "fatal|panic",  "selected": false}
+            ]
+          }
+        ]
+      },
+      "time": {"from": "now-15m", "to": "now"},
+      "timepicker": {},
+      "timezone": "browser",
+      "title": "Kubernetes Log Explorer",
+      "uid": "k8s-log-explorer",
+      "version": 1
+    }

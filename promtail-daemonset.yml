@@ -1,0 +1,181 @@
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: promtail
+  namespace: log
+  labels:
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: log-pipeline
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: promtail
+  labels:
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: log-pipeline
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "nodes/proxy", "services", "endpoints", "pods", "namespaces"]
+    verbs: ["get", "watch", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: promtail
+  labels:
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: log-pipeline
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: promtail
+subjects:
+  - kind: ServiceAccount
+    name: promtail
+    namespace: log
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: promtail-daemonset-config
+  namespace: log
+  labels:
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: log-pipeline
+data:
+  promtail.yaml: |
+    server:
+      http_listen_port: 3101
+      grpc_listen_port: 0
+      log_level: info
+
+    clients:
+      - url: http://loki:3100/loki/api/v1/push
+        backoff_config:
+          min_period: 500ms
+          max_period: 5m
+          max_retries: 10
+        batchwait: 1s
+        batchsize: 1048576
+
+    positions:
+      filename: /run/promtail/positions.yaml
+      sync_period: 10s
+
+    scrape_configs:
+      - job_name: log-namespace-pods
+        static_configs:
+          - targets: [localhost]
+            labels:
+              job: log-namespace
+              namespace: log
+              __path__: /var/log/pods/log_*/**/*.log
+        pipeline_stages:
+          - docker: {}
+          - regex:
+              source: filename
+              expression: '/var/log/pods/log_(?P<pod>[^_]+)[^/]*/(?P<container>[^/]+)/'
+          - labels:
+              pod:
+              container:
+          - regex:
+              source: pod
+              expression: '^(?P<app>[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*?)(?:-[a-f0-9]{7,10})?(?:-[a-z0-9]{5})?$'
+          - labels:
+              app:
+          - regex:
+              expression: '(?i)(?P<level>error|err|warn|warning|info|debug|fatal|panic|critical)'
+          - labels:
+              level:
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: promtail
+  namespace: log
+  labels:
+    app: promtail
+    app.kubernetes.io/name: promtail
+    app.kubernetes.io/part-of: log-pipeline
+spec:
+  selector:
+    matchLabels:
+      app: promtail
+  # Controlled rollout: one pod at a time replaced during upgrades
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: promtail
+        app.kubernetes.io/name: promtail
+    spec:
+      serviceAccountName: promtail
+      # Run on control-plane nodes as well (tolerate all taints)
+      priorityClassName: system-node-critical
+      tolerations:
+        - operator: Exists
+      containers:
+        - name: promtail
+          # Pinned to latest stable — upgrade by bumping this tag
+          image: grafana/promtail:3.4.2
+          args:
+            - -config.file=/etc/promtail/promtail.yaml
+          ports:
+            - containerPort: 3101
+              name: http-metrics
+          volumeMounts:
+            - name: config
+              mountPath: /etc/promtail
+            - name: pods-logs
+              mountPath: /var/log/pods
+              readOnly: true
+            - name: docker-logs
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+            - name: positions
+              mountPath: /run/promtail
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: 3101
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /ready
+              port: 3101
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 5
+      volumes:
+        - name: config
+          configMap:
+            name: promtail-daemonset-config
+        - name: pods-logs
+          hostPath:
+            path: /var/log/pods
+        - name: docker-logs
+          hostPath:
+            path: /var/lib/docker/containers
+        - name: positions
+          hostPath:
+            path: /run/promtail
+            type: DirectoryOrCreate
