@@ -70,14 +70,14 @@ data:
           - targets: [localhost]
             labels:
               job: log-namespace
-              namespace: log
-              __path__: /var/log/pods/log_*/**/*.log
+              __path__: /var/log/pods/*/**/*.log
         pipeline_stages:
           - docker: {}
           - regex:
               source: filename
-              expression: '/var/log/pods/log_(?P<pod>[^_]+)[^/]*/(?P<container>[^/]+)/'
+              expression: '/var/log/pods/(?P<namespace>[^_]+)_(?P<pod>[^_]+)[^/]*/(?P<container>[^/]+)/'
           - labels:
+              namespace:
               pod:
               container:
           - regex:

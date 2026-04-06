@@ -1,0 +1,71 @@
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ghost-data-pvc
+  namespace: log
+  labels:
+    app.kubernetes.io/name: ghost
+    app.kubernetes.io/part-of: log-pipeline
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: ghost
+  namespace: log
+  labels:
+    app: ghost
+    app.kubernetes.io/name: ghost
+    app.kubernetes.io/part-of: log-pipeline
+spec:
+  containers:
+    - name: ghost
+      image: ghost:6.24.0
+      ports:
+        - containerPort: 2368
+      env:
+        - name: NODE_ENV
+          value: production
+        - name: database__client
+          value: sqlite3
+        - name: database__connection__filename
+          value: /var/lib/ghost/content/data/ghost.db
+        - name: url
+          value: http://localhost:2368
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      volumeMounts:
+        - name: ghost-data
+          mountPath: /var/lib/ghost/content
+  volumes:
+    - name: ghost-data
+      persistentVolumeClaim:
+        claimName: ghost-data-pvc
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ghost
+  namespace: log
+  labels:
+    app.kubernetes.io/name: ghost
+    app.kubernetes.io/part-of: log-pipeline
+spec:
+  selector:
+    app: ghost
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 2368

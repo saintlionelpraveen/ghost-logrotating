@@ -39,7 +39,7 @@ data:
     # ------------------------------------------------------------------
     resolve_container() {
       cid="$1"
-      for lnk in "$PODS_DIR"/log_*/*/*.log; do
+      for lnk in "$PODS_DIR"/*/*/*.log; do
         [ -L "$lnk" ] || continue
         tgt=$(readlink "$lnk" 2>/dev/null) || continue
         case "$tgt" in *"$cid"*)
