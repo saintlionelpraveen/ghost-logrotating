@@ -1,11 +1,11 @@
 # ============================================================
-# Mattermost — converted from Pod to Deployment.
+# Mattermost — standalone Pod for clean naming.
 # DB password pulled from Secret (not inline in datasource URL).
 # Images pinned to specific stable tags.
 # ============================================================
 ---
-apiVersion: apps/v1
-kind: Deployment
+apiVersion: v1
+kind: Pod
 metadata:
   name: mattermost
   namespace: log
@@ -14,95 +14,84 @@ metadata:
     app.kubernetes.io/name: mattermost
     app.kubernetes.io/part-of: log-pipeline
 spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: mattermost
-  strategy:
-    type: Recreate
-  template:
-    metadata:
-      labels:
-        app: mattermost
-        app.kubernetes.io/name: mattermost
-    spec:
-      containers:
-        - name: postgres
-          image: postgres:14.15
-          env:
-            - name: POSTGRES_DB
-              value: mattermost
-            - name: POSTGRES_USER
-              value: mmuser
-            - name: POSTGRES_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mattermost-db-secret
-                  key: postgres-password
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-          readinessProbe:
-            exec:
-              command:
-                - pg_isready
-                - -U
-                - mmuser
-            initialDelaySeconds: 10
-            periodSeconds: 5
-            failureThreshold: 10
-          livenessProbe:
-            exec:
-              command:
-                - pg_isready
-                - -U
-                - mmuser
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 3
+  restartPolicy: Always
+  containers:
+    - name: postgres
+      image: postgres:14.15
+      env:
+        - name: POSTGRES_DB
+          value: mattermost
+        - name: POSTGRES_USER
+          value: mmuser
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mattermost-db-secret
+              key: postgres-password
+      resources:
+        requests:
+          cpu: 100m
+          memory: 128Mi
+        limits:
+          cpu: 500m
+          memory: 512Mi
+      readinessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -U
+            - mmuser
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        failureThreshold: 10
+      livenessProbe:
+        exec:
+          command:
+            - pg_isready
+            - -U
+            - mmuser
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 3
 
-        - name: mattermost
-          image: mattermost/mattermost-team-edition:9.11.5
-          ports:
-            - containerPort: 8065
-          env:
-            - name: MM_SQLSETTINGS_DRIVERNAME
-              value: postgres
-            # Password is NOT embedded in the URL — pulled from Secret instead
-            - name: MM_DB_PASSWORD
-              valueFrom:
-                secretKeyRef:
-                  name: mattermost-db-secret
-                  key: postgres-password
-            - name: MM_SQLSETTINGS_DATASOURCE
-              value: "postgres://mmuser:$(MM_DB_PASSWORD)@127.0.0.1:5432/mattermost?sslmode=disable&connect_timeout=10"
-            - name: MM_SERVICESETTINGS_SITEURL
-              value: "http://mattermost.log.svc.cluster.local:8065"
-          resources:
-            requests:
-              cpu: 100m
-              memory: 256Mi
-            limits:
-              cpu: 1000m
-              memory: 1Gi
-          readinessProbe:
-            httpGet:
-              path: /api/v4/system/ping
-              port: 8065
-            initialDelaySeconds: 30
-            periodSeconds: 10
-            failureThreshold: 5
-          livenessProbe:
-            httpGet:
-              path: /api/v4/system/ping
-              port: 8065
-            initialDelaySeconds: 60
-            periodSeconds: 15
-            failureThreshold: 3
+    - name: mattermost
+      image: mattermost/mattermost-team-edition:9.11.5
+      ports:
+        - containerPort: 8065
+      env:
+        - name: MM_SQLSETTINGS_DRIVERNAME
+          value: postgres
+        # Password is NOT embedded in the URL — pulled from Secret instead
+        - name: MM_DB_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: mattermost-db-secret
+              key: postgres-password
+        - name: MM_SQLSETTINGS_DATASOURCE
+          value: "postgres://mmuser:$(MM_DB_PASSWORD)@127.0.0.1:5432/mattermost?sslmode=disable&connect_timeout=10"
+        - name: MM_SERVICESETTINGS_SITEURL
+          value: "http://mattermost.log.svc.cluster.local:8065"
+      resources:
+        requests:
+          cpu: 100m
+          memory: 256Mi
+        limits:
+          cpu: 1000m
+          memory: 1Gi
+      readinessProbe:
+        httpGet:
+          path: /api/v4/system/ping
+          port: 8065
+        initialDelaySeconds: 30
+        periodSeconds: 10
+        failureThreshold: 5
+      livenessProbe:
+        httpGet:
+          path: /api/v4/system/ping
+          port: 8065
+        initialDelaySeconds: 60
+        periodSeconds: 15
+        failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

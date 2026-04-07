@@ -181,8 +181,8 @@ data:
       sleep "$INTERVAL"
     done
 ---
-apiVersion: apps/v1
-kind: DaemonSet
+apiVersion: v1
+kind: Pod
 metadata:
   name: rclone-archiver
   namespace: log
@@ -191,96 +191,85 @@ metadata:
     app.kubernetes.io/name: rclone-archiver
     app.kubernetes.io/part-of: log-pipeline
 spec:
-  selector:
-    matchLabels:
-      app: rclone-archiver
-  updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-  template:
-    metadata:
-      labels:
-        app: rclone-archiver
-        app.kubernetes.io/name: rclone-archiver
-    spec:
-      priorityClassName: system-cluster-critical
-      tolerations:
-        - operator: Exists
-      containers:
-        - name: rclone
-          # Pinned — upgrade by bumping this tag
-          image: rclone/rclone:1.68.2
-          command: ["/bin/sh", "/scripts/archiver.sh"]
-          volumeMounts:
-            - name: script
-              mountPath: /scripts
-            - name: docker-logs
-              mountPath: /var/lib/docker/containers
-              readOnly: true
-            - name: pods-logs
-              mountPath: /var/log/pods
-              readOnly: true
-            - name: archive-staging
-              mountPath: /archive
-            - name: archiver-state
-              mountPath: /run/archiver
-            - name: rclone-config
-              mountPath: /etc/rclone
-              readOnly: true
-            - name: tmp-dir
-              mountPath: /tmp
-          resources:
-            requests:
-              cpu: 25m
-              memory: 32Mi
-            limits:
-              cpu: 100m
-              memory: 128Mi
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          # Readiness: wait until the first archive cycle has started
-          readinessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "test -f /tmp/heartbeat"
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 3
-          # Liveness: heartbeat must be touched within last 3 minutes
-          livenessProbe:
-            exec:
-              command:
-                - /bin/sh
-                - -c
-                - "find /tmp/heartbeat -mmin -3 | grep -q heartbeat"
-            initialDelaySeconds: 30
-            periodSeconds: 60
-            failureThreshold: 3
-      volumes:
+  restartPolicy: Always
+  priorityClassName: system-cluster-critical
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: rclone
+      # Pinned — upgrade by bumping this tag
+      image: rclone/rclone:1.68.2
+      command: ["/bin/sh", "/scripts/archiver.sh"]
+      volumeMounts:
         - name: script
-          configMap:
-            name: rclone-archiver-script
-            defaultMode: 0755
+          mountPath: /scripts
         - name: docker-logs
-          hostPath:
-            path: /var/lib/docker/containers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
         - name: pods-logs
-          hostPath:
-            path: /var/log/pods
+          mountPath: /var/log/pods
+          readOnly: true
         - name: archive-staging
-          emptyDir: {}
+          mountPath: /archive
         - name: archiver-state
-          hostPath:
-            path: /run/archiver
-            type: DirectoryOrCreate
+          mountPath: /run/archiver
         - name: rclone-config
-          secret:
-            secretName: rclone-config
+          mountPath: /etc/rclone
+          readOnly: true
         - name: tmp-dir
-          emptyDir: {}
+          mountPath: /tmp
+      resources:
+        requests:
+          cpu: 25m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      # Readiness: wait until the first archive cycle has started
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - "test -f /tmp/heartbeat"
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        failureThreshold: 3
+      # Liveness: heartbeat must be touched within last 3 minutes
+      livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - "find /tmp/heartbeat -mmin -3 | grep -q heartbeat"
+        initialDelaySeconds: 30
+        periodSeconds: 60
+        failureThreshold: 3
+  volumes:
+    - name: script
+      configMap:
+        name: rclone-archiver-script
+        defaultMode: 0755
+    - name: docker-logs
+      hostPath:
+        path: /var/lib/docker/containers
+    - name: pods-logs
+      hostPath:
+        path: /var/log/pods
+    - name: archive-staging
+      emptyDir: {}
+    - name: archiver-state
+      hostPath:
+        path: /run/archiver
+        type: DirectoryOrCreate
+    - name: rclone-config
+      secret:
+        secretName: rclone-config
+    - name: tmp-dir
+      emptyDir: {}
+

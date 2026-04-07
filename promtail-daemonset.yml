@@ -82,7 +82,7 @@ data:
               container:
           - regex:
               source: pod
-              expression: '^(?P<app>[a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*?)(?:-[a-f0-9]{7,10})?(?:-[a-z0-9]{5})?$'
+              expression: '^(?P<app>.+?)(?:-[0-9a-fA-F]{7,10})?(?:-[a-zA-Z0-9]{5})?(?:-[0-9]+)?$'
           - labels:
               app:
           - regex:
@@ -90,8 +90,8 @@ data:
           - labels:
               level:
 ---
-apiVersion: apps/v1
-kind: DaemonSet
+apiVersion: v1
+kind: Pod
 metadata:
   name: promtail
   namespace: log
@@ -100,82 +100,68 @@ metadata:
     app.kubernetes.io/name: promtail
     app.kubernetes.io/part-of: log-pipeline
 spec:
-  selector:
-    matchLabels:
-      app: promtail
-  # Controlled rollout: one pod at a time replaced during upgrades
-  updateStrategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxUnavailable: 1
-  template:
-    metadata:
-      labels:
-        app: promtail
-        app.kubernetes.io/name: promtail
-    spec:
-      serviceAccountName: promtail
-      # Run on control-plane nodes as well (tolerate all taints)
-      priorityClassName: system-node-critical
-      tolerations:
-        - operator: Exists
-      containers:
-        - name: promtail
-          # Pinned to latest stable — upgrade by bumping this tag
-          image: grafana/promtail:3.4.2
-          args:
-            - -config.file=/etc/promtail/promtail.yaml
-          ports:
-            - containerPort: 3101
-              name: http-metrics
-          volumeMounts:
-            - name: config
-              mountPath: /etc/promtail
-            - name: pods-logs
-              mountPath: /var/log/pods
-              readOnly: true
-            - name: docker-logs
-              mountPath: /var/lib/docker/containers
-              readOnly: true
-            - name: positions
-              mountPath: /run/promtail
-          resources:
-            requests:
-              cpu: 50m
-              memory: 64Mi
-            limits:
-              cpu: 200m
-              memory: 256Mi
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop: ["ALL"]
-          readinessProbe:
-            httpGet:
-              path: /ready
-              port: 3101
-            initialDelaySeconds: 10
-            periodSeconds: 10
-            failureThreshold: 3
-          livenessProbe:
-            httpGet:
-              path: /ready
-              port: 3101
-            initialDelaySeconds: 15
-            periodSeconds: 20
-            failureThreshold: 5
-      volumes:
+  restartPolicy: Always
+  serviceAccountName: promtail
+  priorityClassName: system-node-critical
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: promtail
+      # Pinned to latest stable — upgrade by bumping this tag
+      image: grafana/promtail:3.4.2
+      args:
+        - -config.file=/etc/promtail/promtail.yaml
+      ports:
+        - containerPort: 3101
+          name: http-metrics
+      volumeMounts:
         - name: config
-          configMap:
-            name: promtail-daemonset-config
+          mountPath: /etc/promtail
         - name: pods-logs
-          hostPath:
-            path: /var/log/pods
+          mountPath: /var/log/pods
+          readOnly: true
         - name: docker-logs
-          hostPath:
-            path: /var/lib/docker/containers
+          mountPath: /var/lib/docker/containers
+          readOnly: true
         - name: positions
-          hostPath:
-            path: /run/promtail
-            type: DirectoryOrCreate
+          mountPath: /run/promtail
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 200m
+          memory: 256Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      readinessProbe:
+        httpGet:
+          path: /ready
+          port: 3101
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        failureThreshold: 3
+      livenessProbe:
+        httpGet:
+          path: /ready
+          port: 3101
+        initialDelaySeconds: 15
+        periodSeconds: 20
+        failureThreshold: 5
+  volumes:
+    - name: config
+      configMap:
+        name: promtail-daemonset-config
+    - name: pods-logs
+      hostPath:
+        path: /var/log/pods
+    - name: docker-logs
+      hostPath:
+        path: /var/lib/docker/containers
+    - name: positions
+      hostPath:
+        path: /run/promtail
+        type: DirectoryOrCreate

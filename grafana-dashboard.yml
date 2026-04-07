@@ -90,6 +90,7 @@ data:
             }
           ],
           "options": {
+            "showLogVolume": false,
             "showTime": true,
             "showLabels": true,
             "showCommonLabels": false,
