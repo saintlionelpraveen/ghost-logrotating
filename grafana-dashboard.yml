@@ -4,167 +4,237 @@ metadata:
   name: k8s-log-dashboard
   namespace: log
   labels:
-    grafana_dashboard: "1"
+    grafana_dashboard: '1'
     app.kubernetes.io/name: grafana
     app.kubernetes.io/part-of: log-pipeline
 data:
-  k8s-log-explorer.json: |
-    {
-      "annotations": {"list": []},
-      "description": "Cluster-wide Kubernetes log explorer with namespace/app/level drill-down",
-      "editable": true,
-      "fiscalYearStartMonth": 0,
-      "graphTooltip": 1,
-      "id": null,
-      "links": [],
-      "liveNow": true,
-      "panels": [
-        {
-          "id": 1,
-          "title": "Log Volume by App",
-          "description": "Number of log lines per app over time. Stacked bars show relative volume.",
-          "type": "timeseries",
-          "gridPos": {"h": 8, "w": 16, "x": 0, "y": 0},
-          "datasource": {"type": "loki", "uid": "loki"},
-          "targets": [
-            {
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", app=~\"$app\"} [$__interval])) by (app)",
-              "legendFormat": "{{app}}",
-              "refId": "A"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "drawStyle": "bars",
-                "fillOpacity": 60,
-                "stacking": {"mode": "normal"},
-                "lineWidth": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {"displayMode": "table", "placement": "right", "calcs": ["sum", "max"]}
-          }
-        },
-        {
-          "id": 2,
-          "title": "Error Rate by App",
-          "description": "Count of ERROR/FATAL log lines per app. Spike here = something is broken.",
-          "type": "timeseries",
-          "gridPos": {"h": 8, "w": 8, "x": 16, "y": 0},
-          "datasource": {"type": "loki", "uid": "loki"},
-          "targets": [
-            {
-              "expr": "sum(count_over_time({namespace=~\"$namespace\", app=~\"$app\", level=~\"error|err|fatal|panic|critical\"} [$__interval])) by (app)",
-              "legendFormat": "{{app}} errors",
-              "refId": "A"
-            }
-          ],
-          "fieldConfig": {
-            "defaults": {
-              "color": {"mode": "fixed", "fixedColor": "red"},
-              "custom": {
-                "drawStyle": "bars",
-                "fillOpacity": 70,
-                "stacking": {"mode": "normal"},
-                "lineWidth": 0
-              }
-            }
-          },
-          "options": {
-            "legend": {"displayMode": "list", "placement": "bottom"}
-          }
-        },
-        {
-          "id": 3,
-          "title": "Logs — ${namespace} / ${app} [level: ${level}]",
-          "description": "Live log stream. Click a row to expand. Use variables above to filter.",
-          "type": "logs",
-          "gridPos": {"h": 20, "w": 24, "x": 0, "y": 8},
-          "datasource": {"type": "loki", "uid": "loki"},
-          "targets": [
-            {
-              "expr": "{namespace=~\"$namespace\", app=~\"$app\", level=~\"$level\"}",
-              "refId": "A"
-            }
-          ],
-          "options": {
-            "showLogVolume": false,
-            "showTime": true,
-            "showLabels": true,
-            "showCommonLabels": false,
-            "wrapLogMessage": true,
-            "enableLogDetails": true,
-            "sortOrder": "Descending",
-            "dedupStrategy": "none",
-            "prettifyLogMessage": false
-          }
-        }
-      ],
-      "refresh": "5s",
-      "schemaVersion": 38,
-      "style": "dark",
-      "tags": ["kubernetes", "logs", "loki"],
-      "templating": {
-        "list": [
-          {
-            "name": "DS_LOKI",
-            "type": "datasource",
-            "query": "loki",
-            "current": {"text": "Loki", "value": "loki"},
-            "hide": 2
-          },
-          {
-            "name": "namespace",
-            "label": "Namespace",
-            "type": "query",
-            "datasource": {"type": "loki", "uid": "loki"},
-            "definition": "label_values(namespace)",
-            "query": "label_values(namespace)",
-            "includeAll": true,
-            "multi": false,
-            "allValue": ".+",
-            "current": {"text": "log", "value": "log"},
-            "sort": 1,
-            "refresh": 2
-          },
-          {
-            "name": "app",
-            "label": "App",
-            "type": "query",
-            "datasource": {"type": "loki", "uid": "loki"},
-            "definition": "label_values({namespace=~\"$namespace\"}, app)",
-            "query": "label_values({namespace=~\"$namespace\"}, app)",
-            "includeAll": true,
-            "multi": false,
-            "allValue": ".+",
-            "sort": 1,
-            "refresh": 2
-          },
-          {
-            "name": "level",
-            "label": "Log Level",
-            "type": "custom",
-            "query": ".+,info,warning|warn,error|err,debug,fatal|panic",
-            "includeAll": false,
-            "multi": false,
-            "current": {"text": "All", "value": ".+"},
-            "options": [
-              {"text": "All",     "value": ".+",           "selected": true},
-              {"text": "Info",    "value": "info",         "selected": false},
-              {"text": "Warning", "value": "warning|warn", "selected": false},
-              {"text": "Error",   "value": "error|err",    "selected": false},
-              {"text": "Debug",   "value": "debug",        "selected": false},
-              {"text": "Fatal",   "value": "fatal|panic",  "selected": false}
-            ]
-          }
-        ]
-      },
-      "time": {"from": "now-15m", "to": "now"},
-      "timepicker": {},
-      "timezone": "browser",
-      "title": "Kubernetes Log Explorer",
-      "uid": "k8s-log-explorer",
-      "version": 1
-    }
+  k8s-log-explorer.json: "{\n  \"annotations\": {\n    \"list\": []\n  },\n  \"description\"\
+    : \"Cluster-wide Kubernetes log explorer with namespace/app/level drill-down\"\
+    ,\n  \"editable\": true,\n  \"fiscalYearStartMonth\": 0,\n  \"graphTooltip\":\
+    \ 1,\n  \"id\": null,\n  \"links\": [],\n  \"liveNow\": true,\n  \"panels\": [\n\
+    \    {\n      \"id\": 4,\n      \"title\": \"Pod Memory Usage (RAM)\",\n     \
+    \ \"type\": \"timeseries\",\n      \"gridPos\": {\n        \"h\": 8,\n       \
+    \ \"w\": 16,\n        \"x\": 0,\n        \"y\": 0\n      },\n      \"datasource\"\
+    : {\n        \"type\": \"prometheus\",\n        \"uid\": \"prometheus\"\n    \
+    \  },\n      \"targets\": [\n        {\n          \"expr\": \"sum(container_memory_working_set_bytes{namespace=\\\
+    \"$namespace\\\", pod=~\\\"$pod\\\"}) by (pod) / 1024 / 1024\",\n          \"\
+    legendFormat\": \"{{pod}} (MB)\"\n        }\n      ],\n      \"options\": {\n\
+    \        \"legend\": {\n          \"displayMode\": \"table\",\n          \"placement\"\
+    : \"right\",\n          \"calcs\": [\n            \"last\",\n            \"max\"\
+    \n          ]\n        }\n      },\n      \"fieldConfig\": {\n        \"defaults\"\
+    : {\n          \"unit\": \"decmbytes\",\n          \"custom\": {\n           \
+    \ \"lineWidth\": 2,\n            \"fillOpacity\": 10\n          }\n        }\n\
+    \      }\n    },\n    {\n      \"id\": 5,\n      \"title\": \"Pod Restarts\",\n\
+    \      \"type\": \"stat\",\n      \"gridPos\": {\n        \"h\": 8,\n        \"\
+    w\": 8,\n        \"x\": 16,\n        \"y\": 0\n      },\n      \"datasource\"\
+    : {\n        \"type\": \"prometheus\",\n        \"uid\": \"prometheus\"\n    \
+    \  },\n      \"targets\": [\n        {\n          \"expr\": \"sum(kube_pod_container_status_restarts_total{namespace=\\\
+    \"$namespace\\\", pod=~\\\"$pod\\\"}) by (pod)\",\n          \"legendFormat\"\
+    : \"{{pod}}\"\n        }\n      ],\n      \"options\": {\n        \"colorMode\"\
+    : \"background\",\n        \"graphMode\": \"none\",\n        \"justifyMode\":\
+    \ \"auto\"\n      }\n    },\n    {\n      \"id\": 7,\n      \"title\": \"Pod CPU\
+    \ Usage\",\n      \"type\": \"timeseries\",\n      \"gridPos\": {\n        \"\
+    h\": 8,\n        \"w\": 16,\n        \"x\": 0,\n        \"y\": 8\n      },\n \
+    \     \"datasource\": {\n        \"type\": \"prometheus\",\n        \"uid\": \"\
+    prometheus\"\n      },\n      \"targets\": [\n        {\n          \"expr\": \"\
+    sum(rate(container_cpu_usage_seconds_total{namespace=\\\"$namespace\\\", pod=~\\\
+    \"$pod\\\"}[5m])) by (pod) * 1000\",\n          \"legendFormat\": \"{{pod}} (m)\"\
+    \n        }\n      ],\n      \"options\": {\n        \"legend\": {\n         \
+    \ \"displayMode\": \"table\",\n          \"placement\": \"right\",\n         \
+    \ \"calcs\": [\n            \"last\",\n            \"max\"\n          ]\n    \
+    \    }\n      },\n      \"fieldConfig\": {\n        \"defaults\": {\n        \
+    \  \"unit\": \"short\",\n          \"custom\": {\n            \"lineWidth\": 2,\n\
+    \            \"fillOpacity\": 10\n          }\n        }\n      }\n    },\n  \
+    \  {\n      \"id\": 8,\n      \"title\": \"Pod Status\",\n      \"type\": \"table\"\
+    ,\n      \"gridPos\": {\n        \"h\": 8,\n        \"w\": 8,\n        \"x\":\
+    \ 16,\n        \"y\": 8\n      },\n      \"datasource\": {\n        \"type\":\
+    \ \"prometheus\",\n        \"uid\": \"prometheus\"\n      },\n      \"targets\"\
+    : [\n        {\n          \"expr\": \"kube_pod_status_phase{namespace=\\\"$namespace\\\
+    \"} == 1\",\n          \"instant\": true,\n          \"format\": \"table\",\n\
+    \          \"legendFormat\": \"\"\n        }\n      ],\n      \"fieldConfig\"\
+    : {\n        \"defaults\": {\n          \"custom\": {\n            \"displayMode\"\
+    : \"auto\"\n          }\n        },\n        \"overrides\": [\n          {\n \
+    \           \"matcher\": {\n              \"id\": \"byName\",\n              \"\
+    options\": \"Time\"\n            },\n            \"properties\": [\n         \
+    \     {\n                \"id\": \"custom.hidden\",\n                \"value\"\
+    : true\n              }\n            ]\n          },\n          {\n          \
+    \  \"matcher\": {\n              \"id\": \"byName\",\n              \"options\"\
+    : \"Value\"\n            },\n            \"properties\": [\n              {\n\
+    \                \"id\": \"custom.hidden\",\n                \"value\": true\n\
+    \              }\n            ]\n          },\n          {\n            \"matcher\"\
+    : {\n              \"id\": \"byName\",\n              \"options\": \"__name__\"\
+    \n            },\n            \"properties\": [\n              {\n           \
+    \     \"id\": \"custom.hidden\",\n                \"value\": true\n          \
+    \    }\n            ]\n          },\n          {\n            \"matcher\": {\n\
+    \              \"id\": \"byName\",\n              \"options\": \"instance\"\n\
+    \            },\n            \"properties\": [\n              {\n            \
+    \    \"id\": \"custom.hidden\",\n                \"value\": true\n           \
+    \   }\n            ]\n          },\n          {\n            \"matcher\": {\n\
+    \              \"id\": \"byName\",\n              \"options\": \"job\"\n     \
+    \       },\n            \"properties\": [\n              {\n                \"\
+    id\": \"custom.hidden\",\n                \"value\": true\n              }\n \
+    \           ]\n          },\n          {\n            \"matcher\": {\n       \
+    \       \"id\": \"byName\",\n              \"options\": \"namespace\"\n      \
+    \      },\n            \"properties\": [\n              {\n                \"\
+    id\": \"custom.hidden\",\n                \"value\": true\n              }\n \
+    \           ]\n          },\n          {\n            \"matcher\": {\n       \
+    \       \"id\": \"byName\",\n              \"options\": \"uid\"\n            },\n\
+    \            \"properties\": [\n              {\n                \"id\": \"custom.hidden\"\
+    ,\n                \"value\": true\n              }\n            ]\n         \
+    \ },\n          {\n            \"matcher\": {\n              \"id\": \"byName\"\
+    ,\n              \"options\": \"phase\"\n            },\n            \"properties\"\
+    : [\n              {\n                \"id\": \"custom.displayMode\",\n      \
+    \          \"value\": \"color-background\"\n              },\n              {\n\
+    \                \"id\": \"mappings\",\n                \"value\": [\n       \
+    \           {\n                    \"type\": \"value\",\n                    \"\
+    options\": {\n                      \"Running\": {\n                        \"\
+    text\": \"Running\",\n                        \"color\": \"green\",\n        \
+    \                \"index\": 0\n                      },\n                    \
+    \  \"Pending\": {\n                        \"text\": \"Pending\",\n          \
+    \              \"color\": \"yellow\",\n                        \"index\": 1\n\
+    \                      },\n                      \"Failed\": {\n             \
+    \           \"text\": \"Failed\",\n                        \"color\": \"red\"\
+    ,\n                        \"index\": 2\n                      },\n          \
+    \            \"Succeeded\": {\n                        \"text\": \"Succeeded\"\
+    ,\n                        \"color\": \"blue\",\n                        \"index\"\
+    : 3\n                      },\n                      \"Unknown\": {\n        \
+    \                \"text\": \"Unknown\",\n                        \"color\": \"\
+    orange\",\n                        \"index\": 4\n                      }\n   \
+    \                 }\n                  }\n                ]\n              }\n\
+    \            ]\n          },\n          {\n            \"matcher\": {\n      \
+    \        \"id\": \"byName\",\n              \"options\": \"pod\"\n           \
+    \ },\n            \"properties\": [\n              {\n                \"id\":\
+    \ \"custom.width\",\n                \"value\": 200\n              }\n       \
+    \     ]\n          }\n        ]\n      },\n      \"options\": {\n        \"sortBy\"\
+    : [\n          {\n            \"displayName\": \"pod\",\n            \"desc\"\
+    : false\n          }\n        ],\n        \"footer\": {\n          \"show\": false\n\
+    \        }\n      },\n      \"links\": [\n        {\n          \"title\": \"Filter\
+    \ by pod\",\n          \"url\": \"?var-pod=${__data.fields.pod}\",\n         \
+    \ \"targetBlank\": false\n        }\n      ]\n    },\n    {\n      \"id\": 12,\n\
+    \      \"title\": \"Disk I/O per Pod\",\n      \"type\": \"timeseries\",\n   \
+    \   \"gridPos\": {\n        \"h\": 8,\n        \"w\": 24,\n        \"x\": 0,\n\
+    \        \"y\": 16\n      },\n      \"datasource\": {\n        \"type\": \"prometheus\"\
+    ,\n        \"uid\": \"prometheus\"\n      },\n      \"targets\": [\n        {\n\
+    \          \"expr\": \"sum(rate(container_fs_reads_bytes_total{namespace=\\\"\
+    $namespace\\\", pod=~\\\"$pod\\\"}[5m])) by (pod)\",\n          \"legendFormat\"\
+    : \"{{pod}} read\"\n        },\n        {\n          \"expr\": \"sum(rate(container_fs_writes_bytes_total{namespace=\\\
+    \"$namespace\\\", pod=~\\\"$pod\\\"}[5m])) by (pod)\",\n          \"legendFormat\"\
+    : \"{{pod}} write\"\n        }\n      ],\n      \"options\": {\n        \"legend\"\
+    : {\n          \"displayMode\": \"table\",\n          \"placement\": \"right\"\
+    ,\n          \"calcs\": [\n            \"last\",\n            \"max\"\n      \
+    \    ]\n        }\n      },\n      \"fieldConfig\": {\n        \"defaults\": {\n\
+    \          \"unit\": \"Bps\",\n          \"custom\": {\n            \"lineWidth\"\
+    : 2,\n            \"fillOpacity\": 10\n          }\n        }\n      }\n    },\n\
+    \    {\n      \"id\": 13,\n      \"title\": \"Top 10 Pods by Memory Requests\"\
+    ,\n      \"type\": \"piechart\",\n      \"gridPos\": {\n        \"h\": 8,\n  \
+    \      \"w\": 12,\n        \"x\": 0,\n        \"y\": 24\n      },\n      \"datasource\"\
+    : {\n        \"type\": \"prometheus\",\n        \"uid\": \"prometheus\"\n    \
+    \  },\n      \"targets\": [\n        {\n          \"expr\": \"topk(10, sum by\
+    \ (pod) (kube_pod_container_resource_requests{resource=\\\"memory\\\"}))\",\n\
+    \          \"legendFormat\": \"{{pod}}\"\n        }\n      ],\n      \"options\"\
+    : {\n        \"legend\": {\n          \"displayMode\": \"list\",\n          \"\
+    placement\": \"bottom\",\n          \"showLegend\": true\n        },\n       \
+    \ \"pieType\": \"pie\",\n        \"reduceOptions\": {\n          \"calcs\": [\n\
+    \            \"lastNotNull\"\n          ],\n          \"fields\": \"\",\n    \
+    \      \"values\": false\n        },\n        \"tooltip\": {\n          \"mode\"\
+    : \"single\",\n          \"sort\": \"none\"\n        }\n      },\n      \"fieldConfig\"\
+    : {\n        \"defaults\": {\n          \"color\": {\n            \"mode\": \"\
+    palette-classic\"\n          },\n          \"custom\": {\n            \"hideFrom\"\
+    : {\n              \"legend\": false,\n              \"tooltip\": false,\n   \
+    \           \"viz\": false\n            }\n          }\n        }\n      }\n \
+    \   },\n    {\n      \"id\": 1,\n      \"title\": \"Log Volume by App\",\n   \
+    \   \"description\": \"Number of log lines per app over time. Stacked bars show\
+    \ relative volume.\",\n      \"type\": \"timeseries\",\n      \"gridPos\": {\n\
+    \        \"h\": 8,\n        \"w\": 16,\n        \"x\": 0,\n        \"y\": 440\n\
+    \      },\n      \"datasource\": {\n        \"type\": \"loki\",\n        \"uid\"\
+    : \"loki\"\n      },\n      \"targets\": [\n        {\n          \"expr\": \"\
+    sum(count_over_time({namespace=~\\\"$namespace\\\", app=~\\\"$app\\\"} [$__interval]))\
+    \ by (app)\",\n          \"legendFormat\": \"{{app}}\",\n          \"refId\":\
+    \ \"A\"\n        }\n      ],\n      \"fieldConfig\": {\n        \"defaults\":\
+    \ {\n          \"custom\": {\n            \"drawStyle\": \"bars\",\n         \
+    \   \"fillOpacity\": 60,\n            \"stacking\": {\n              \"mode\"\
+    : \"normal\"\n            },\n            \"lineWidth\": 0\n          }\n    \
+    \    }\n      },\n      \"options\": {\n        \"legend\": {\n          \"displayMode\"\
+    : \"table\",\n          \"placement\": \"right\",\n          \"calcs\": [\n  \
+    \          \"sum\",\n            \"max\"\n          ]\n        }\n      }\n  \
+    \  },\n    {\n      \"id\": 2,\n      \"title\": \"Error Rate by App\",\n    \
+    \  \"description\": \"Count of ERROR/FATAL log lines per app. Spike here = something\
+    \ is broken.\",\n      \"type\": \"timeseries\",\n      \"gridPos\": {\n     \
+    \   \"h\": 8,\n        \"w\": 8,\n        \"x\": 16,\n        \"y\": 440\n   \
+    \   },\n      \"datasource\": {\n        \"type\": \"loki\",\n        \"uid\"\
+    : \"loki\"\n      },\n      \"targets\": [\n        {\n          \"expr\": \"\
+    sum(count_over_time({namespace=~\\\"$namespace\\\", app=~\\\"$app\\\", level=~\\\
+    \"error|err|fatal|panic|critical\\\"} [$__interval])) by (app)\",\n          \"\
+    legendFormat\": \"{{app}} errors\",\n          \"refId\": \"A\"\n        }\n \
+    \     ],\n      \"fieldConfig\": {\n        \"defaults\": {\n          \"color\"\
+    : {\n            \"mode\": \"fixed\",\n            \"fixedColor\": \"red\"\n \
+    \         },\n          \"custom\": {\n            \"drawStyle\": \"bars\",\n\
+    \            \"fillOpacity\": 70,\n            \"stacking\": {\n             \
+    \ \"mode\": \"normal\"\n            },\n            \"lineWidth\": 0\n       \
+    \   }\n        }\n      },\n      \"options\": {\n        \"legend\": {\n    \
+    \      \"displayMode\": \"list\",\n          \"placement\": \"bottom\"\n     \
+    \   }\n      }\n    },\n    {\n      \"id\": 3,\n      \"title\": \"Logs \\u2014\
+    \ ${namespace} / ${app} [level: ${level}]\",\n      \"description\": \"Live log\
+    \ stream. Click a row to expand. Use variables above to filter.\",\n      \"type\"\
+    : \"logs\",\n      \"gridPos\": {\n        \"h\": 20,\n        \"w\": 24,\n  \
+    \      \"x\": 0,\n        \"y\": 448\n      },\n      \"datasource\": {\n    \
+    \    \"type\": \"loki\",\n        \"uid\": \"loki\"\n      },\n      \"targets\"\
+    : [\n        {\n          \"expr\": \"{namespace=~\\\"$namespace\\\", app=~\\\"\
+    $app\\\", level=~\\\"$level\\\"}\",\n          \"refId\": \"A\"\n        }\n \
+    \     ],\n      \"options\": {\n        \"showLogVolume\": false,\n        \"\
+    showTime\": true,\n        \"showLabels\": true,\n        \"showCommonLabels\"\
+    : false,\n        \"wrapLogMessage\": true,\n        \"enableLogDetails\": true,\n\
+    \        \"sortOrder\": \"Descending\",\n        \"dedupStrategy\": \"none\",\n\
+    \        \"prettifyLogMessage\": false\n      }\n    }\n  ],\n  \"refresh\": \"\
+    10s\",\n  \"schemaVersion\": 38,\n  \"style\": \"dark\",\n  \"tags\": [\n    \"\
+    kubernetes\",\n    \"logs\",\n    \"loki\"\n  ],\n  \"templating\": {\n    \"\
+    list\": [\n      {\n        \"name\": \"DS_LOKI\",\n        \"type\": \"datasource\"\
+    ,\n        \"query\": \"loki\",\n        \"current\": {\n          \"text\": \"\
+    Loki\",\n          \"value\": \"loki\"\n        },\n        \"hide\": 2\n    \
+    \  },\n      {\n        \"name\": \"DS_PROMETHEUS\",\n        \"type\": \"datasource\"\
+    ,\n        \"query\": \"prometheus\",\n        \"current\": {\n          \"text\"\
+    : \"Prometheus\",\n          \"value\": \"prometheus\"\n        },\n        \"\
+    hide\": 2\n      },\n      {\n        \"name\": \"DS_PROMETHEUS\",\n        \"\
+    type\": \"datasource\",\n        \"query\": \"prometheus\",\n        \"current\"\
+    : {\n          \"text\": \"Prometheus\",\n          \"value\": \"prometheus\"\n\
+    \        },\n        \"hide\": 2\n      },\n      {\n        \"name\": \"namespace\"\
+    ,\n        \"label\": \"Namespace\",\n        \"type\": \"query\",\n        \"\
+    datasource\": {\n          \"type\": \"loki\",\n          \"uid\": \"loki\"\n\
+    \        },\n        \"definition\": \"label_values(namespace)\",\n        \"\
+    query\": \"label_values(namespace)\",\n        \"includeAll\": true,\n       \
+    \ \"multi\": false,\n        \"allValue\": \".+\",\n        \"current\": {\n \
+    \         \"text\": \"log\",\n          \"value\": \"log\"\n        },\n     \
+    \   \"sort\": 1,\n        \"refresh\": 2\n      },\n      {\n        \"name\"\
+    : \"pod\",\n        \"label\": \"Pod\",\n        \"type\": \"query\",\n      \
+    \  \"datasource\": {\n          \"type\": \"prometheus\",\n          \"uid\":\
+    \ \"prometheus\"\n        },\n        \"definition\": \"label_values(kube_pod_info{namespace=\\\
+    \"$namespace\\\"}, pod)\",\n        \"query\": {\n          \"query\": \"label_values(kube_pod_info{namespace=\\\
+    \"$namespace\\\"}, pod)\",\n          \"refId\": \"StandardVariableQuery\"\n \
+    \       },\n        \"refresh\": 2,\n        \"sort\": 1,\n        \"multi\":\
+    \ true,\n        \"includeAll\": true,\n        \"allValue\": \".*\",\n      \
+    \  \"current\": {\n          \"text\": \"All\",\n          \"value\": \"$__all\"\
+    \n        },\n        \"hide\": 0\n      },\n      {\n        \"name\": \"app\"\
+    ,\n        \"label\": \"App\",\n        \"type\": \"query\",\n        \"datasource\"\
+    : {\n          \"type\": \"loki\",\n          \"uid\": \"loki\"\n        },\n\
+    \        \"definition\": \"label_values({namespace=~\\\"$namespace\\\"}, app)\"\
+    ,\n        \"query\": \"label_values({namespace=~\\\"$namespace\\\"}, app)\",\n\
+    \        \"includeAll\": true,\n        \"multi\": false,\n        \"allValue\"\
+    : \".+\",\n        \"sort\": 1,\n        \"refresh\": 2\n      },\n      {\n \
+    \       \"name\": \"level\",\n        \"label\": \"Log Level\",\n        \"type\"\
+    : \"custom\",\n        \"query\": \".+,info,warning|warn,error|err,debug,fatal|panic\"\
+    ,\n        \"includeAll\": false,\n        \"multi\": false,\n        \"current\"\
+    : {\n          \"text\": \"All\",\n          \"value\": \".+\"\n        },\n \
+    \       \"options\": [\n          {\n            \"text\": \"All\",\n        \
+    \    \"value\": \".+\",\n            \"selected\": true\n          },\n      \
+    \    {\n            \"text\": \"Info\",\n            \"value\": \"info\",\n  \
+    \          \"selected\": false\n          },\n          {\n            \"text\"\
+    : \"Warning\",\n            \"value\": \"warning|warn\",\n            \"selected\"\
+    : false\n          },\n          {\n            \"text\": \"Error\",\n       \
+    \     \"value\": \"error|err\",\n            \"selected\": false\n          },\n\
+    \          {\n            \"text\": \"Debug\",\n            \"value\": \"debug\"\
+    ,\n            \"selected\": false\n          },\n          {\n            \"\
+    text\": \"Fatal\",\n            \"value\": \"fatal|panic\",\n            \"selected\"\
+    : false\n          }\n        ]\n      }\n    ]\n  },\n  \"time\": {\n    \"from\"\
+    : \"now-1h\",\n    \"to\": \"now\"\n  },\n  \"timepicker\": {},\n  \"timezone\"\
+    : \"browser\",\n  \"title\": \"Kubernetes Log Explorer\",\n  \"uid\": \"k8s-log-explorer\"\
+    ,\n  \"version\": 1\n}\n"

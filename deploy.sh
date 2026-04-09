@@ -99,19 +99,22 @@ step "6/9 — Promtail Pod"
 $KUBECTL apply -f promtail-daemonset.yml
 
 # ---------------------------------------------------
-step "7/9 — Rclone Archiver Pod"
+step "7/9 — Prometheus & Archiver Pods"
 # ---------------------------------------------------
+$KUBECTL apply -f prometheus.yml
 $KUBECTL apply -f rclone-archiver.yml
 
 # ---------------------------------------------------
 step "8/9 — Waiting for pods to become Ready (90s timeout)..."
 # ---------------------------------------------------
-$KUBECTL -n $NS wait pod/ghost           --for=condition=Ready --timeout=90s || warn "ghost not ready yet"
-$KUBECTL -n $NS wait pod/wordpress       --for=condition=Ready --timeout=90s || warn "wordpress not ready yet"
-$KUBECTL -n $NS wait pod/listmonk        --for=condition=Ready --timeout=90s || warn "listmonk not ready yet"
-$KUBECTL -n $NS wait pod/mattermost      --for=condition=Ready --timeout=90s || warn "mattermost not ready yet"
-$KUBECTL -n $NS wait pod/promtail        --for=condition=Ready --timeout=90s || warn "promtail not ready yet"
-$KUBECTL -n $NS wait pod/rclone-archiver --for=condition=Ready --timeout=90s || warn "rclone-archiver not ready yet"
+$KUBECTL -n $NS wait pod/ghost              --for=condition=Ready --timeout=90s || warn "ghost not ready yet"
+$KUBECTL -n $NS wait pod/wordpress          --for=condition=Ready --timeout=90s || warn "wordpress not ready yet"
+$KUBECTL -n $NS wait pod/listmonk           --for=condition=Ready --timeout=90s || warn "listmonk not ready yet"
+$KUBECTL -n $NS wait pod/mattermost         --for=condition=Ready --timeout=90s || warn "mattermost not ready yet"
+$KUBECTL -n $NS wait pod/promtail           --for=condition=Ready --timeout=90s || warn "promtail not ready yet"
+$KUBECTL -n $NS wait pod/prometheus         --for=condition=Ready --timeout=90s || warn "prometheus not ready yet"
+$KUBECTL -n $NS wait pod/kube-state-metrics --for=condition=Ready --timeout=90s || warn "kube-state-metrics not ready yet"
+$KUBECTL -n $NS wait pod/rclone-archiver    --for=condition=Ready --timeout=90s || warn "rclone-archiver not ready yet"
 
 # ---------------------------------------------------
 step "9/9 — Final verification"

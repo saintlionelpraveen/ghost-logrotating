@@ -22,3 +22,13 @@ data:
         jsonData:
           maxLines: 1000
           timeout: 60
+      - name: Prometheus
+        type: prometheus
+        uid: prometheus              # Must match ${DS_PROMETHEUS} in dashboard JSON
+        access: proxy
+        url: http://prometheus:9090
+        isDefault: false
+        editable: true
+        version: 1
+        jsonData:
+          timeInterval: "15s"
