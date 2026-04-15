@@ -7,13 +7,41 @@ set -euo pipefail
 
 NS="log"
 KUBECTL="kubectl"
-LOG_MAX_SIZE="10m"
-LOG_MAX_FILE="3"
+
+# ── Read log limits from Minikube config.json (single source of truth) ──
+MINIKUBE_CONFIG="$HOME/.minikube/profiles/minikube/config.json"
+if [ ! -f "$MINIKUBE_CONFIG" ]; then
+  echo "[ERROR] Minikube config not found at $MINIKUBE_CONFIG"; exit 1
+fi
+
+LOG_MAX_SIZE=$(python3 -c "
+import json
+cfg = json.load(open('$MINIKUBE_CONFIG'))
+for opt in cfg.get('DockerOpt', []):
+    if opt.startswith('log-opt=max-size='):
+        print(opt.split('=',2)[2])
+        break
+else:
+    print('10m')
+")
+
+LOG_MAX_FILE=$(python3 -c "
+import json
+cfg = json.load(open('$MINIKUBE_CONFIG'))
+for opt in cfg.get('DockerOpt', []):
+    if opt.startswith('log-opt=max-file='):
+        print(opt.split('=',2)[2])
+        break
+else:
+    print('3')
+")
 
 info()  { echo -e "\033[32m[INFO]\033[0m  $*"; }
 warn()  { echo -e "\033[33m[WARN]\033[0m  $*"; }
 err()   { echo -e "\033[31m[ERROR]\033[0m $*"; exit 1; }
 step()  { echo -e "\n\033[34m▶ $*\033[0m"; }
+
+info "Read from config.json → max-size=$LOG_MAX_SIZE, max-file=$LOG_MAX_FILE"
 
 # ---------------------------------------------------
 step "0/9 — Enforce Docker log rotation limits (persistent)"
@@ -23,27 +51,29 @@ step "0/9 — Enforce Docker log rotation limits (persistent)"
 # Docker reads it, so limits survive minikube stop/start cycles.
 
 # -- One-time install: patch script + systemd drop-in --
-DROPIN_INSTALLED=$(minikube ssh "test -f /etc/systemd/system/docker.service.d/log-limits.conf && echo yes" 2>/dev/null)
-if [ "$DROPIN_INSTALLED" != "yes" ]; then
-  info "Installing persistent systemd drop-in for Docker log limits..."
-  minikube ssh "sudo tee /usr/local/bin/patch-docker-log-opts.sh > /dev/null && sudo chmod +x /usr/local/bin/patch-docker-log-opts.sh" << 'SCRIPT'
+# Always reinstall the drop-in to keep values in sync with config.json
+info "Installing persistent systemd drop-in for Docker log limits..."
+
+# Use base64 to avoid shell quoting issues when passing script through minikube ssh
+PATCH_SCRIPT=$(cat << EOF
 #!/bin/bash
 python3 -c "
 import json, os
 p = '/etc/docker/daemon.json'
 c = json.load(open(p)) if os.path.exists(p) else {}
-c['log-opts'] = {'max-size': '10m', 'max-file': '3'}
+c['log-opts'] = {'max-size': '${LOG_MAX_SIZE}', 'max-file': '${LOG_MAX_FILE}'}
 json.dump(c, open(p, 'w'))
 "
-SCRIPT
-  minikube ssh "sudo mkdir -p /etc/systemd/system/docker.service.d"
-  minikube ssh "sudo tee /etc/systemd/system/docker.service.d/log-limits.conf > /dev/null" << 'DROPIN'
-[Service]
-ExecStartPre=-/usr/local/bin/patch-docker-log-opts.sh
-DROPIN
-  minikube ssh "sudo systemctl daemon-reload"
-  info "Systemd drop-in installed — log limits will auto-apply on every minikube start"
-fi
+EOF
+)
+PATCH_B64=$(echo "$PATCH_SCRIPT" | base64 -w 0)
+minikube ssh "echo '$PATCH_B64' | base64 -d | sudo tee /usr/local/bin/patch-docker-log-opts.sh > /dev/null && sudo chmod +x /usr/local/bin/patch-docker-log-opts.sh"
+
+minikube ssh "sudo mkdir -p /etc/systemd/system/docker.service.d"
+DROPIN_B64=$(echo -e "[Service]\nExecStartPre=-/usr/local/bin/patch-docker-log-opts.sh" | base64 -w 0)
+minikube ssh "echo '$DROPIN_B64' | base64 -d | sudo tee /etc/systemd/system/docker.service.d/log-limits.conf > /dev/null"
+minikube ssh "sudo systemctl daemon-reload"
+info "Systemd drop-in installed with max-size=$LOG_MAX_SIZE, max-file=$LOG_MAX_FILE"
 
 # -- Always verify & patch current session --
 CURRENT_MAX_SIZE=$(minikube ssh "cat /etc/docker/daemon.json" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('log-opts',{}).get('max-size',''))" 2>/dev/null || echo "")
