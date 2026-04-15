@@ -1,0 +1,275 @@
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: rclone-archiver-script
+  namespace: log
+  labels:
+    app.kubernetes.io/name: rclone-archiver
+    app.kubernetes.io/part-of: log-pipeline
+data:
+  archiver.sh: |
+    #!/bin/sh
+    # Production-hardened rclone log archiver
+    # Changes from v1:
+    #   - Removed top-level `set -e` (was killing the loop on first upload failure)
+    #   - Per-function error handling with explicit exit code checks
+    #   - Improved logging with log levels
+    #   - State cleanup respects pod restarts correctly
+    #   - Heartbeat written inside the loop body (was outside)
+
+    ARCHIVE_DIR="/archive"
+    LIMIT_KB=15360          # 15 MB threshold before upload
+    PODS_DIR="/var/log/pods"
+    DOCKER_DIR="/var/lib/docker/containers"
+    STATE_DIR="/run/archiver/state"
+    RCLONE_REMOTE="n"       # matches [n] section in rclone.conf
+    RCLONE_BASE="k8s-logs"
+    INTERVAL=60
+
+    mkdir -p "$STATE_DIR"
+
+    log()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [INFO]  $1"; }
+    warn() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [WARN]  $1"; }
+    err()  { echo "[$(date '+%Y-%m-%d %H:%M:%S')] [ERROR] $1"; }
+
+    # ------------------------------------------------------------------
+    # resolve_container: given a Docker container ID, return ns|pod|ctr
+    # by walking /var/log/pods symlinks.
+    # ------------------------------------------------------------------
+    resolve_container() {
+      cid="$1"
+      for lnk in "$PODS_DIR"/*/*/*.log; do
+        [ -L "$lnk" ] || continue
+        tgt=$(readlink "$lnk" 2>/dev/null) || continue
+        case "$tgt" in *"$cid"*)
+          cdir=$(dirname "$lnk")
+          pdir=$(dirname "$cdir")
+          dname=$(basename "$pdir")
+          ns=$(echo "$dname"  | cut -d'_' -f1)
+          pod=$(echo "$dname" | cut -d'_' -f2)
+          ctr=$(basename "$cdir")
+          echo "$ns|$pod|$ctr"
+          return 0 ;;
+        esac
+      done
+      # Graceful fallback — unknown containers are staged but never uploaded
+      echo "unknown|unknown|unknown"
+    }
+
+    # ------------------------------------------------------------------
+    # archive_rotated: copy any .log.1 / .log.2 files that we haven't
+    # seen before (tracked by inode in STATE_DIR).
+    # NOTE: errors here are logged, not fatal — loop continues.
+    # ------------------------------------------------------------------
+    archive_rotated() {
+      log "Scanning rotated log files in $DOCKER_DIR ..."
+      found=0
+      for cdir in "$DOCKER_DIR"/*/; do
+        [ -d "$cdir" ] || continue
+        cid=$(basename "$cdir")
+        scid=$(echo "$cid" | cut -c1-12)
+
+        for rot in "$cdir"*-json.log.1 "$cdir"*-json.log.2; do
+          [ -f "$rot" ] || continue
+
+          inode=$(stat -c '%i' "$rot" 2>/dev/null) || continue
+          sf="$STATE_DIR/${scid}_${inode}"
+          [ -f "$sf" ] && continue   # already archived
+
+          info=$(resolve_container "$cid")
+          ns=$(echo "$info"  | cut -d'|' -f1)
+          app=$(echo "$info" | cut -d'|' -f2)
+          ctr=$(echo "$info" | cut -d'|' -f3)
+
+          dest_dir="$ARCHIVE_DIR/$ns/$app"
+          mkdir -p "$dest_dir" || { err "mkdir failed: $dest_dir"; continue; }
+
+          ts=$(date '+%Y%m%d_%H%M%S')
+          suf=$(echo "$rot" | sed 's/.*log\.//')
+          dest="$dest_dir/${ns}_${app}_${ctr}_${ts}_rot${suf}.log"
+
+          if cp "$rot" "$dest"; then
+            touch "$sf"
+            found=$((found + 1))
+            log "Archived: $ns/$app/$ctr (rot.$suf) → $(basename "$dest")"
+          else
+            err "Failed to copy $rot → $dest (skipping)"
+          fi
+        done
+      done
+      log "archive_rotated: $found new file(s) staged."
+    }
+
+    # ------------------------------------------------------------------
+    # upload_if_ready: for each ns/app staging dir, bundle all *.log
+    # files into a single tar.gz and upload to GDrive when size >= LIMIT_KB.
+    # Upload failures are logged but do NOT abort the loop.
+    # ------------------------------------------------------------------
+    upload_if_ready() {
+      for nsdir in "$ARCHIVE_DIR"/*/; do
+        [ -d "$nsdir" ] || continue
+        ns=$(basename "$nsdir")
+        [ "$ns" = "unknown" ] && continue  # skip unresolved containers
+
+        for appdir in "$nsdir"*/; do
+          [ -d "$appdir" ] || continue
+          app=$(basename "$appdir")
+
+          fc=$(find "$appdir" -name "*.log" -type f 2>/dev/null | wc -l)
+          [ "$fc" -eq 0 ] && continue
+
+          tkb=$(du -sk "$appdir" 2>/dev/null | awk '{print $1}')
+          if [ "$tkb" -ge "$LIMIT_KB" ]; then
+            ts=$(date '+%Y%m%d_%H%M%S')
+            tarname="${ns}_${app}_${ts}.tar.gz"
+            tarpath="/tmp/$tarname"
+            gdest="${RCLONE_REMOTE}:${RCLONE_BASE}/${ns}/${app}/${ts}"
+
+            log "Creating archive: $tarname ($fc files, ${tkb}KB)"
+            if ! tar -czf "$tarpath" -C "$appdir" . 2>&1; then
+              err "tar failed for $ns/$app — skipping upload"
+              rm -f "$tarpath"
+              continue
+            fi
+
+            log "Uploading to GDrive: $gdest/"
+            if rclone copy "$tarpath" "$gdest/" \
+                --config /etc/rclone/rclone.conf \
+                --retries 3 \
+                --retries-sleep 10s \
+                --stats 0 2>&1; then
+              log "Upload SUCCESS: $tarname"
+              rm -f "$tarpath"
+              find "$appdir" -name "*.log" -type f -delete
+            else
+              err "Upload FAILED for $tarname — will retry next cycle"
+              rm -f "$tarpath"
+              # Staged files remain for next cycle retry
+            fi
+          else
+            log "Staging $ns/$app: ${tkb}KB / ${LIMIT_KB}KB ($fc files pending)"
+          fi
+        done
+      done
+    }
+
+    # ------------------------------------------------------------------
+    # cleanup_state: remove state marker files older than 7 days to
+    # prevent unbounded growth (rotated files are gone by then anyway).
+    # ------------------------------------------------------------------
+    cleanup_state() {
+      pruned=$(find "$STATE_DIR" -type f -mtime +7 -delete -print 2>/dev/null | wc -l)
+      [ "$pruned" -gt 0 ] && log "cleanup_state: pruned $pruned stale marker(s)"
+    }
+
+    # ------------------------------------------------------------------
+    # Main loop
+    # ------------------------------------------------------------------
+    log "=== Rclone Log Archiver Started ==="
+    log "Threshold: ${LIMIT_KB}KB | Remote: ${RCLONE_REMOTE}: | Interval: ${INTERVAL}s"
+
+    while true; do
+      # Heartbeat: liveness probe checks this file is freshly touched
+      touch /tmp/heartbeat
+
+      archive_rotated
+      upload_if_ready
+      cleanup_state
+
+      log "Cycle complete — sleeping ${INTERVAL}s"
+      sleep "$INTERVAL"
+    done
+---
+apiVersion: v1
+kind: Pod
+metadata:
+  name: rclone-archiver
+  namespace: log
+  labels:
+    app: rclone-archiver
+    app.kubernetes.io/name: rclone-archiver
+    app.kubernetes.io/part-of: log-pipeline
+spec:
+  restartPolicy: Always
+  priorityClassName: system-cluster-critical
+  tolerations:
+    - operator: Exists
+  containers:
+    - name: rclone
+      # Pinned — upgrade by bumping this tag
+      image: rclone/rclone:1.68.2
+      command: ["/bin/sh", "/scripts/archiver.sh"]
+      volumeMounts:
+        - name: script
+          mountPath: /scripts
+        - name: docker-logs
+          mountPath: /var/lib/docker/containers
+          readOnly: true
+        - name: pods-logs
+          mountPath: /var/log/pods
+          readOnly: true
+        - name: archive-staging
+          mountPath: /archive
+        - name: archiver-state
+          mountPath: /run/archiver
+        - name: rclone-config
+          mountPath: /etc/rclone
+          readOnly: true
+        - name: tmp-dir
+          mountPath: /tmp
+      resources:
+        requests:
+          cpu: 25m
+          memory: 32Mi
+        limits:
+          cpu: 100m
+          memory: 128Mi
+      securityContext:
+        readOnlyRootFilesystem: true
+        allowPrivilegeEscalation: false
+        capabilities:
+          drop: ["ALL"]
+      # Readiness: wait until the first archive cycle has started
+      readinessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - "test -f /tmp/heartbeat"
+        initialDelaySeconds: 10
+        periodSeconds: 10
+        failureThreshold: 3
+      # Liveness: heartbeat must be touched within last 3 minutes
+      livenessProbe:
+        exec:
+          command:
+            - /bin/sh
+            - -c
+            - "find /tmp/heartbeat -mmin -3 | grep -q heartbeat"
+        initialDelaySeconds: 30
+        periodSeconds: 60
+        failureThreshold: 3
+  volumes:
+    - name: script
+      configMap:
+        name: rclone-archiver-script
+        defaultMode: 0755
+    - name: docker-logs
+      hostPath:
+        path: /var/lib/docker/containers
+    - name: pods-logs
+      hostPath:
+        path: /var/log/pods
+    - name: archive-staging
+      emptyDir: {}
+    - name: archiver-state
+      hostPath:
+        path: /run/archiver
+        type: DirectoryOrCreate
+    - name: rclone-config
+      secret:
+        secretName: rclone-config
+    - name: tmp-dir
+      emptyDir: {}
+
