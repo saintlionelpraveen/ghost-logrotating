@@ -4,8 +4,8 @@ This report outlines the technical architecture and operational workflow of the 
 
 ---
 
-### 1. Introduction: Log Rotation Overview
-The cluster utilizes a multi-tier log management strategy. **Promtail** is deployed as a DaemonSet to scrape active pod logs and forward them to **Loki** for real-time visualization in Grafana. Simultaneously, Docker manages local rotation to prevent node disk exhaustion, while a custom **Rclone Archiver pipeline** ensures long-term retention by offloading rotated logs to Google Drive.
+### 1. Introduction: Log Rotation & Matrix Overview
+The cluster utilizes a multi-tier observability strategy. **Promtail** is deployed as a DaemonSet to scrape active pod logs and forward them to **Loki**, while **Prometheus** simultaneously scrapes time-series matrix logs across node and pod levels for real-time visualization in Grafana. Concurrently, Docker manages local rotation to prevent node disk exhaustion, and a custom **Rclone Archiver pipeline** ensures long-term retention by offloading rotated logs to Google Drive.
 
 ### 2. Primary Log Storage Paths
 Logs are stored on the node and accessible via the following standard paths:
@@ -52,6 +52,23 @@ After logs are moved to the `/archive` directory inside the archiver pod, the fo
 2. **Persistence**: Once the staging area reaches a threshold of **15MB**, the system uses **Rclone** to upload the bundles to Google Drive.
 3. **Automatic Purge**: Upon a successful upload, the script deletes the local files within `/archive`, ensuring the pod's storage remains clean.
 
+### 8. Active Performance Scraping (Prometheus Matrix Logs)
+Just as Promtail targets active log symlinks, **Prometheus** actively targets distinct API endpoints and exporters to construct real-time matrix logs (time-series metrics). Monitoring is divided across three distinct proxy scopes:
+
+- **1. Container-Level Metrics (cAdvisor)**:
+  - **Scrape Path**: Internally queried via the Kubelet proxy at `/api/v1/nodes/<node-name>/proxy/metrics/cadvisor`.
+  - **Why We Need It**: cAdvisor provides raw, container-specific statistics (CPU cores, Memory working set, Disk I/O) making it the immediate source of truth when a specific pod (like WordPress or Ghost) experiences intense resource limits.
+  
+- **2. Cluster-State Metrics (kube-state-metrics)**:
+  - **Scrape Path**: Targets the dedicated service endpoint at `kube-state-metrics:8080`.
+  - **Why We Need It**: Unlike cAdvisor which watches hardware consumption, `kube-state-metrics` listens to the Kubernetes API. It identifies systemic lifecycle changes like a pod getting `OOMKilled`, repeatedly crashing (Pod Restarts), or getting stuck in a `Pending` phase.
+
+- **3. Node-Level Hardware Metrics (Node-Exporter)**:
+  - **Scrape Path**: Deployed as a DaemonSet, scraping underlying host data via `node-exporter:9100`.
+  - **Why We Need It**: Bypassing Kubernetes entirely to scrape the underlying Linux kernel stats, this establishes a safety net for absolute Node disk space, total memory limits, and IO bottlenecks.
+
+These aggregated Prometheus matrices are seamlessly unified in Grafana alongside the Loki log streams. If `kube-state-metrics` triggers a high restart count, administrators can simultaneously correlate the exact Memory matrix spike from `cAdvisor` with the fatal crash stack-trace fetched from `Promtail`, deeply refining the troubleshooting workflow.
+
 ---
 **Status**: Production Ready
-**Retention Policy**: 3 local files / 15MB aggregate cloud upload threshold.
+**Retention Policy**: 3 local files / 15MB aggregate cloud upload threshold (Logs) | 30-day TSDB memory boundary (Prometheus Matrices).
